@@ -37,7 +37,8 @@ int main(int argc, char *argv[]) {
 
     while (1) {
         printf("shell> ");
-        fgets(buffer, BUFFER_SIZE, stdin);
+        if (fgets(buffer, BUFFER_SIZE, stdin) == NULL)
+            break;
 
         write(sock, buffer, strlen(buffer));
 
@@ -45,8 +46,23 @@ int main(int argc, char *argv[]) {
             break;
 
         memset(buffer, 0, BUFFER_SIZE);
-        read(sock, buffer, BUFFER_SIZE);
-        printf("%s", buffer);
+
+        while (1) {
+            ssize_t n = read(sock, buffer, BUFFER_SIZE - 1);
+            if (n <= 0)
+                break;
+
+            buffer[n] = '\0';
+
+            char *end_pos = strstr(buffer, "__END__");
+            if (end_pos != NULL) {
+                *end_pos = '\0';   // cut marker out
+                printf("%s", buffer);
+                break;
+            }
+
+            printf("%s", buffer);
+        }
     }
 
     close(sock);
