@@ -35,5 +35,12 @@ int main() {
         exit(1);
     }
 
+    // listen
+    if (listen(server_fd, 5) < 0) {
+        perror("listen failed");
+        exit(1);
+    }
+    printf("Server listening on port %d...\n", PORT);
+
     return 0;
 }
