@@ -42,5 +42,25 @@ int main() {
     }
     printf("Server listening on port %d...\n", PORT);
 
+    // accept
+    client_fd = accept(server_fd, (struct sockaddr *)&address, &addrlen);
+    if (client_fd < 0) {
+        perror("accept failed");
+        exit(1);
+    }
+    printf("Client connected.\n");
+    while (1) {
+        memset(buffer, 0, BUFFER_SIZE);
+        read(client_fd, buffer, BUFFER_SIZE);
+        printf("Recieved: %s\n", buffer);
+
+        if (strncmp(buffer, "exit", 4) == 0) {
+            break;
+        }
+        write(client_fd, buffer, strlen(buffer));
+    }
+
+    close(client_fd);
+    close(server_fd);
     return 0;
 }
