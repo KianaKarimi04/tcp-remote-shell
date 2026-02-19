@@ -56,7 +56,9 @@ int main() {
     printf("Client connected.\n");
     while (1) {
         memset(buffer, 0, BUFFER_SIZE);
-        read(client_fd, buffer, BUFFER_SIZE);
+        ssize_t n = read(client_fd, buffer, BUFFER_SIZE);
+        if (n <= 0)
+            break;
 
         if (strncmp(buffer, "exit", 4) == 0)
             break;
