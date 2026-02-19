@@ -20,6 +20,10 @@ int main() {
 
     //create socket
     server_fd = socket(AF_INET, SOCK_STREAM, 0);
+
+    int opt = 1;
+    setsockopt(server_fd, SOL_SOCKET, SO_REUSEADDR, &opt, sizeof(opt));
+
     if (server_fd < 0) {
         perror("socket failed");
         exit(1);
@@ -85,10 +89,11 @@ int main() {
             // Parent
             close(pipefd[1]); // close write end
 
-            memset(buffer, 0, BUFFER_SIZE);
-            read(pipefd[0], buffer, BUFFER_SIZE);
+            ssize_t bytes_read;
 
-            write(client_fd, buffer, strlen(buffer));
+            while ((bytes_read = read(pipefd[0], buffer, BUFFER_SIZE)) > 0) {
+                write(client_fd, buffer, bytes_read);
+            }
 
             close(pipefd[0]);
             wait(NULL);
