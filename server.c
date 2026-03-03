@@ -142,10 +142,12 @@ void handle_client(int client_fd) {
 
             if (input_file) {
                 int fd = open(input_file, O_RDONLY);
-                if (fd >= 0) {
-                    dup2(fd, STDIN_FILENO);
-                    close(fd);
+                if (fd < 0) {
+					perror("Open failed");
+					exit(1);
                 }
+				dup2(fd, STDIN_FILENO);
+                close(fd);
             }
 
             if (output_file) {
