@@ -6,6 +6,7 @@
 #include <sys/wait.h>
 #include <signal.h>
 #include <fcntl.h>
+#include <time.h>
 
 #define PORT 8080
 #define BUFFER_SIZE 1024
@@ -13,6 +14,7 @@
 #define MAX_ARGS 100
 
 void handle_client(int client_fd);
+void log_event(const char *message);
 
 int main() {
     int server_fd;
@@ -45,27 +47,32 @@ int main() {
     }
 
     printf("Server listening on port %d...\n", PORT);
+    log_event("Server started");
 
-    // Create process pool
     for (int i = 0; i < POOL_SIZE; i++) {
         pid_t pid = fork();
 
         if (pid == 0) {
             while (1) {
                 int client_fd = accept(server_fd, (struct sockaddr *)&address, &addrlen);
+
                 if (client_fd < 0) {
                     perror("accept failed");
                     continue;
                 }
 
+                log_event("Client connected");
+
                 handle_client(client_fd);
+
+                log_event("Client disconnected");
+
                 close(client_fd);
             }
             exit(0);
         }
     }
 
-    // Parent waits
     while (1)
         pause();
 
@@ -77,6 +84,7 @@ void handle_client(int client_fd) {
     char buffer[BUFFER_SIZE];
 
     while (1) {
+
         ssize_t n = read(client_fd, buffer, BUFFER_SIZE - 1);
         if (n <= 0)
             break;
@@ -86,10 +94,10 @@ void handle_client(int client_fd) {
         if (strncmp(buffer, "exit", 4) == 0)
             break;
 
-        // Remove newline
         buffer[strcspn(buffer, "\n")] = 0;
 
-        // Parse arguments
+        log_event(buffer);
+
         char *args[MAX_ARGS];
         char *input_file = NULL;
         char *output_file = NULL;
@@ -98,6 +106,7 @@ void handle_client(int client_fd) {
         int arg_count = 0;
 
         char *token = strtok(buffer, " ");
+
         while (token != NULL) {
 
             if (strcmp(token, "<") == 0) {
@@ -126,6 +135,7 @@ void handle_client(int client_fd) {
             continue;
 
         int pipefd[2];
+
         if (pipe(pipefd) < 0) {
             perror("pipe failed");
             continue;
@@ -134,24 +144,29 @@ void handle_client(int client_fd) {
         pid_t pid = fork();
 
         if (pid == 0) {
+
             close(pipefd[0]);
 
             dup2(pipefd[1], STDOUT_FILENO);
             dup2(pipefd[1], STDERR_FILENO);
+
             close(pipefd[1]);
 
             if (input_file) {
                 int fd = open(input_file, O_RDONLY);
+
                 if (fd < 0) {
-					perror("Open failed");
-					exit(1);
+                    perror("Open failed");
+                    exit(1);
                 }
-				dup2(fd, STDIN_FILENO);
+
+                dup2(fd, STDIN_FILENO);
                 close(fd);
             }
 
             if (output_file) {
                 int fd = open(output_file, O_WRONLY | O_CREAT | O_TRUNC, 0644);
+
                 if (fd >= 0) {
                     dup2(fd, STDOUT_FILENO);
                     close(fd);
@@ -160,6 +175,7 @@ void handle_client(int client_fd) {
 
             if (error_file) {
                 int fd = open(error_file, O_WRONLY | O_CREAT | O_TRUNC, 0644);
+
                 if (fd >= 0) {
                     dup2(fd, STDERR_FILENO);
                     close(fd);
@@ -167,22 +183,45 @@ void handle_client(int client_fd) {
             }
 
             execvp(args[0], args);
+
             perror("exec failed");
             exit(1);
         }
         else {
+
             close(pipefd[1]);
 
             ssize_t bytes_read;
+
             while ((bytes_read = read(pipefd[0], buffer, BUFFER_SIZE)) > 0) {
                 write(client_fd, buffer, bytes_read);
             }
 
             close(pipefd[0]);
+
             wait(NULL);
 
             char *end_marker = "__END__\n";
             write(client_fd, end_marker, strlen(end_marker));
         }
     }
+}
+
+void log_event(const char *message) {
+
+    FILE *log = fopen("server.log", "a");
+
+    if (!log)
+        return;
+
+    time_t now = time(NULL);
+    struct tm *t = localtime(&now);
+
+    fprintf(log, "[%02d:%02d:%02d] %s\n",
+            t->tm_hour,
+            t->tm_min,
+            t->tm_sec,
+            message);
+
+    fclose(log);
 }
